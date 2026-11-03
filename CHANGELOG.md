@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.3 — 2026-11-03
+
+- Organize capture settings into active state, editable preferences, service status and collapsible help/maintenance sections.
+- Keep temporary-unmount warnings and failures visible, with contextual short-interval guidance and an explained next scheduled time.
+- Make the main window's collection settings action explicit and move repeated chart explanations into accessible click/hover help.
+- Unify history, SMART and About close actions; group SMART counters and simplify About while preserving attribution and build/license details.
+
 ## 0.6.2 — 2026-11-03
 
 - Group Cancel and Save and Close at the bottom right of collection settings, replacing the ambiguous Done action.

@@ -196,6 +196,29 @@ final class DriveModel: ObservableObject {
     }
 }
 
+final class HelpPresentation: ObservableObject {
+    @Published var visible = false
+}
+
+struct InfoButton: View {
+    let title: String
+    let text: String
+    @StateObject private var presentation = HelpPresentation()
+    var body: some View {
+        Button { presentation.visible.toggle() } label: {
+            Image(systemName: "info.circle").foregroundStyle(.secondary)
+        }
+        .buttonStyle(.borderless).accessibilityLabel(title).help(text)
+        .popover(isPresented: $presentation.visible) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(title).font(.headline)
+                Text(text).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
+                HStack { Spacer(); Button("关闭") { presentation.visible = false } }
+            }.padding(16).frame(width: 280)
+        }
+    }
+}
+
 struct TemperatureChart: View {
     let readings: [Reading]
     var compact = true
@@ -204,6 +227,7 @@ struct TemperatureChart: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("温度趋势").font(.system(size: 12, weight: .semibold))
+                InfoButton(title: "温度曲线说明", text: "圆点为成功采集的实测值，虚线仅连接采样点，不代表连续监测。曲线显示最近 30 次采集；只有一个采样点时不画连线。")
                 Spacer()
                 Text("最近 \(series.values.count) 次采集").font(.system(size: 10)).foregroundStyle(.secondary)
             }
@@ -257,8 +281,9 @@ struct TemperatureChart: View {
                 .frame(height: compact ? 100 : 170)
                 .padding(.top, 4)
                 .help(series.values.map { "\($0.capturedAt.formatted(date: .abbreviated, time: .standard)) · \(Int($0.celsius.rounded())) °C" }.joined(separator: "\n"))
-                Text(series.values.count == 1 ? "仅 1 个采样点，下一次采集后形成连线。" : "圆点为实测值，虚线仅连接采样点，不代表连续监测。")
-                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                if series.values.count == 1 {
+                    Text("再采集一次即可形成连线。").font(.caption).foregroundStyle(.secondary)
+                }
             }
         }
     }
@@ -269,8 +294,13 @@ struct HistoryView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("温度记录").font(.title2.bold())
-            Text("每个点都是一次成功采集，不代表连续温度。").font(.caption).foregroundStyle(.secondary)
+
             TemperatureChart(readings: readings, compact: false)
+            HStack {
+                Text("采集记录").font(.headline)
+                Spacer()
+                Text("共 \(readings.count) 条 · 最新在前").font(.caption).foregroundStyle(.secondary)
+            }
             List(readings.reversed()) { r in
                 HStack {
                     Text(r.capturedAt.formatted(date: .abbreviated, time: .standard)).font(.system(size: 12, design: .monospaced))
@@ -335,14 +365,14 @@ struct MainView: View {
                 }.padding(.top, 4)
             }
             TemperatureChart(readings: model.readings)
-            Button { model.showSettings() } label: {
-                HStack {
-                    Image(systemName: "clock.arrow.circlepath")
-                    Text(model.modeDescription).font(.system(size: 11))
-                    Spacer()
-                    Text("设置").font(.system(size: 11, weight: .semibold))
-                }
-            }.buttonStyle(.borderless)
+            HStack(spacing: 10) {
+                Image(systemName: "clock.arrow.circlepath").foregroundStyle(.teal)
+                Text(model.modeDescription).font(.system(size: 12, weight: .medium))
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
+                Button("设置…") { model.showSettings() }.buttonStyle(.bordered)
+            }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.primary.opacity(0.045)).clipShape(RoundedRectangle(cornerRadius: 10))
             if let message = model.message {
                 Text(message).font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     .padding(10).frame(maxWidth: .infinity, alignment: .leading).background(Color.primary.opacity(0.05)).clipShape(RoundedRectangle(cornerRadius: 8))
@@ -403,7 +433,8 @@ struct MainView: View {
             .sheet(isPresented: $model.historyVisible) {
                 VStack(spacing: 0) {
                     HistoryView(readings: model.readings)
-                    Button("完成") { model.historyVisible = false }.keyboardShortcut(.defaultAction).padding(.bottom, 18)
+                    HStack { Spacer(); Button("关闭") { model.historyVisible = false }.keyboardShortcut(.defaultAction) }
+                        .padding(.horizontal, 22).padding(.bottom, 18)
                 }
             }
             .sheet(isPresented: $model.aboutVisible) {
@@ -454,16 +485,17 @@ struct SMARTView: View {
             HStack {
                 Text("硬盘与 SMART").font(.title2.bold())
                 Spacer()
-                Button("完成") { model.detailsVisible = false }.keyboardShortcut(.defaultAction)
+                InfoButton(title: "SMART 快照说明", text: "查看详情只读取已保存的快照，不会重新采集。缺少的字段显示 —；断开硬盘后仍可查看上次数据。")
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("容量 · 当前系统信息").font(.headline)
+                    HStack {
+                        Text("容量 · 当前系统信息").font(.headline)
+                        InfoButton(title: "容量说明", text: "容量每 15 秒刷新；APFS 多个卷共享容器空间。GB 使用十进制单位。")
+                    }
                     row("容量范围", model.mount.isAPFS ? "APFS 共享容器" : "当前卷")
                     row("总容量", model.mount.mounted && !model.busy ? MountState.capacity(model.mount.totalBytes) : "—")
                     row("可用空间", model.mount.mounted && !model.busy ? MountState.capacity(model.mount.freeBytes) : "—")
-                    Text("容量每 15 秒刷新；APFS 多个卷共享容器空间。GB 使用十进制单位。")
-                        .font(.caption).foregroundStyle(.secondary)
                     Divider()
                     Text("SMART · 上次成功采集").font(.headline)
                     if let r = model.last {
@@ -475,11 +507,15 @@ struct SMARTView: View {
                         row("备用空间", r.spare.map { "\($0)%" } ?? "—", help: "SSD 内部备用容量比例，与文件系统可用空间无关。")
                         row("备用空间警告阈值", r.smart?.spareThreshold ?? "—")
                         row("已用寿命估计", r.used.map { "\($0)%" } ?? "—", help: "厂商估计的寿命消耗，可以超过 100%；不是保证性的健康评分。")
+                        Divider()
+                        Text("累计读写").font(.headline)
                         row("累计读取", SMARTDetails.dataAmount(r.smart?.dataRead), help: "SMART 累计计数 × 512,000 字节；不是当前读写速度。原始计数：\(r.smart?.dataRead ?? "—")")
                         row("累计写入", SMARTDetails.dataAmount(r.smart?.dataWritten), help: "SMART 累计计数 × 512,000 字节；不是当前读写速度。原始计数：\(r.smart?.dataWritten ?? "—")")
                         row("主机读取命令", r.smart?.readCommands ?? "—")
                         row("主机写入命令", r.smart?.writeCommands ?? "—")
                         row("控制器忙碌时间", r.smart?.busyMinutes.map { "\($0) 分钟" } ?? "—")
+                        Divider()
+                        Text("运行与错误记录").font(.headline)
                         row("通电时间", r.hours.map { "\($0) 小时" } ?? "—")
                         row("通电次数", r.smart?.powerCycles ?? "—")
                         row("非正常断电次数", r.smart?.unsafeShutdowns ?? "—", help: "控制器未收到正常关机通知的累计次数，不等于磁盘损坏次数。")
@@ -488,16 +524,15 @@ struct SMARTView: View {
                     } else {
                         Text("尚无有效 SMART 快照。").foregroundStyle(.secondary)
                     }
-                    Divider()
-                    Text("读取详情不会访问 USB 采集接口。缺少的字段显示 —；已有快照不会因断开硬盘而变成实时数据。")
-                        .font(.caption).foregroundStyle(.secondary)
                 }.padding(.trailing, 8)
             }
+            HStack { Spacer(); Button("关闭") { model.detailsVisible = false }.keyboardShortcut(.defaultAction) }
         }.padding(22).frame(width: 490, height: 610)
     }
     func row(_ title: String, _ value: String, help: String = "") -> some View {
         HStack(alignment: .firstTextBaseline) {
             Text(title).foregroundStyle(.secondary)
+            if !help.isEmpty { InfoButton(title: title + "说明", text: help) }
             Spacer(minLength: 14)
             Text(value).multilineTextAlignment(.trailing).textSelection(.enabled)
         }.font(.system(size: 12)).help(help)
@@ -516,25 +551,37 @@ struct AboutView: View {
                 }
             }
             Text("桌面与菜单栏硬盘温度快照工具").font(.subheadline)
-            VStack(alignment: .leading, spacing: 7) {
-                Link("维护者：dff652", destination: BuildInfo.maintainerURL)
-                Link("GitHub 项目与问题反馈", destination: BuildInfo.repositoryURL)
-            }
-            Text("构建：\(BuildInfo.current.revision)\n构建时间（UTC）：\(BuildInfo.current.builtAt)")
-                .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
-            Divider()
-            Text(model.collectorURL == nil ? "此构建仅包含界面与采集接口。USB 采集后端未包含在公开源码中。" : "本机采集器基于 rtl9210-health-monitor 并作适配。其上游尚无明确许可证，未纳入公开仓库。")
-                .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Text("特别感谢 RazeBerry 的 rtl9210-health-monitor 项目，为本机 RTL9210 采集适配提供了 USB 传输与 NVMe 健康数据读取实现。")
-                .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Link("上游项目：RazeBerry/rtl9210-health-monitor", destination: URL(string: "https://github.com/RazeBerry/rtl9210-health-monitor")!)
-                .font(.system(size: 11))
-            Text("支持手动与定时采集，旧读数始终标注采集时间。无遥测；诊断报告由你选择是否导出和分享。")
-                .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Link("维护者：dff652", destination: BuildInfo.maintainerURL)
+                        Link("GitHub 项目与问题反馈", destination: BuildInfo.repositoryURL)
+                    }
+                    Divider()
+                    Text("致谢").font(.headline)
+                    Text("感谢 RazeBerry 的 rtl9210-health-monitor，为本机采集适配提供 USB 传输与 NVMe 健康数据读取实现。")
+                        .font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
+                    Link("RazeBerry/rtl9210-health-monitor", destination: URL(string: "https://github.com/RazeBerry/rtl9210-health-monitor")!)
+                        .font(.system(size: 12))
+                    DisclosureGroup("版本与开源说明") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("构建：\(BuildInfo.current.revision)\n构建时间（UTC）：\(BuildInfo.current.builtAt)")
+                                .font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
+                            Text("界面与采集接口采用 MIT 许可证。")
+                            Text(model.collectorURL == nil ? "此构建仅包含界面与采集接口。USB 采集后端未包含在公开源码中。" : "本机采集器基于 rtl9210-health-monitor 并作适配。其上游尚无明确许可证，未纳入公开仓库。")
+                        }.font(.system(size: 12)).foregroundStyle(.secondary).padding(.top, 8)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }.font(.system(size: 12))
+                    HStack {
+                        Label("记录仅保存在本机", systemImage: "lock.shield").font(.caption).foregroundStyle(.secondary)
+                        InfoButton(title: "数据与隐私", text: "无遥测或自动上传。诊断报告由你选择是否导出和分享；分享前仍可自行检查内容。")
+                    }
+                }.padding(.trailing, 6).padding(.vertical, 2)
+            }.frame(maxHeight: 390)
             HStack {
                 Button("导出脱敏报告…") { model.exportDiagnostics() }
                 Spacer()
-                Button("完成") { model.aboutVisible = false }.keyboardShortcut(.defaultAction)
+                Button("关闭") { model.aboutVisible = false }.keyboardShortcut(.defaultAction)
             }
         }.padding(24).frame(width: 440)
     }
