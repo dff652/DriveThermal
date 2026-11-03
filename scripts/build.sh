@@ -59,6 +59,7 @@ info={'CFBundleExecutable':'DriveThermal','CFBundleIdentifier':'local.drivetherm
       'CFBundleShortVersionString':version,'CFBundleVersion':build,
       'LSMinimumSystemVersion':'14.0','LSUIElement':True,'NSHighResolutionCapable':True,
       'DTBuildRevision':revision,'DTBuildDate':built_at,'DTBundledCollector':local=='1',
+      'NSRemovableVolumesUsageDescription':'用于检查已登记外置硬盘的占用状态，安全采集健康信息及挂载／卸载宗卷。不会上传硬盘文件。',
       'NSHumanReadableCopyright':'Copyright © 2026 dff652. UI and integration interface: MIT.'}
 with (Path(bundle)/'Contents/Info.plist').open('wb') as f: plistlib.dump(info,f)
 PY

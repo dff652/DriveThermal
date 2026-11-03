@@ -21,6 +21,12 @@ installer instead of requesting a password for each capture. This adapter is
 local-only and remains excluded from the public bundle. See
 [Background service](BACKGROUND_SERVICE.md) for the IPC and scheduling contract.
 
+Local adapters for service protocol 2 additionally support fixed `service-mount`
+and `service-unmount` front-door commands. They must validate the enrolled USB
+bridge, volume UUID and single physical store, preserve ordinary unmount vetoes,
+and verify the resulting mount state. They must not issue SMART commands, reset
+USB, force-unmount or silently mount a volume during scheduled collection.
+
 Environment passed to the backend:
 
 - `DRIVETHERMAL_STATE`: private application-state directory.

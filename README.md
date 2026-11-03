@@ -21,6 +21,7 @@ temperature snapshots**. 中文界面，支持手动／定时采集、历史记�
 - Version, build revision, maintainer link and project link in About.
 - Local application event log, collector-log access and allowlisted diagnostic export.
 - Optional authorized background capture, manual/automatic switching and configurable 30–1440 minute intervals.
+- Mount/unmount controls in the desktop window and menu-bar menu. Unmount pauses collection; a verified mount restores the selected mode. USB power is unchanged.
 - No telemetry, accounts or automatic uploads. GitHub links open only when clicked.
 
 ## 为什么温度不是实时刷新？
@@ -69,7 +70,7 @@ to open About, inspect history or export a diagnostic report.
 
 ## Status
 
-Version 0.5.0 is an early, UI-first public release. The private local collector
+Version 0.6.0 is an early, UI-first public release. The private local collector
 integration was validated on one Apple Silicon Mac and one Realtek 0BDA:9210
 NVMe enclosure; that does not establish compatibility for other disks or bridges.
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0 — 2026-11-03
+
+- Add mount/unmount controls to the desktop window and menu-bar menu for the enrolled volume.
+- Persist a collection pause before unmount; verified mount restores the selected manual/automatic mode and starts a fresh interval.
+- Serialize volume changes with captures and service updates; never force unmount or power off USB.
+- Explain removable-volume privacy permission separately from administrator authorization and provide a Files & Folders settings link.
+- Preserve compatibility with older services, disabling new controls until the service is updated.
+
 ## 0.5.0 — 2026-11-03
 
 - Add an optional administrator-approved, root-owned local capture service.

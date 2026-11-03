@@ -26,3 +26,11 @@ Optional background service state and raw logs are stored in the root-protected
 local account can request its readings and capture log through the limited local
 socket API. Viewing the log explicitly copies it to the user app state; it is
 not included in the allowlisted diagnostic export.
+
+macOS removable-volume access is a separate Files & Folders privacy consent.
+Administrator installation approval and collection mode cannot grant it. The
+settings panel explains this and opens the corresponding System Settings pane;
+it never writes the privacy database or silently grants Full Disk Access.
+Local ad-hoc builds can be identified differently after rebuilding, so a system
+prompt may recur during development. The app includes a removable-volume usage
+description explaining the disk checks and mount/unmount workflow.

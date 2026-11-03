@@ -12,13 +12,17 @@ struct CaptureSettings: Codable, Equatable {
     var automatic = false
     var intervalMinutes = 180
     var valid: Bool { (30...1440).contains(intervalMinutes) }
+    func forScheduling(volumePaused: Bool) -> CaptureSettings {
+        CaptureSettings(automatic: automatic && !volumePaused, intervalMinutes: intervalMinutes)
+    }
 }
 struct ServiceRequest: Codable {
     var command: String
     var settings: CaptureSettings? = nil
 }
 struct ServiceStatus: Codable {
-    var version = "1"
+    var version = "2"
+    var volumePaused: Bool? = nil
     var settings = CaptureSettings()
     var busy = false
     var nextAttempt: Date? = nil

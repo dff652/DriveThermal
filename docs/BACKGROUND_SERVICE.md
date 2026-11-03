@@ -19,7 +19,7 @@ The default public build cannot install a USB collector service.
 - Peer credentials must match the enrolled UID; the client verifies a root peer.
   This is an account-level boundary, not an application code-signature boundary:
   other processes running as that same user can issue the limited requests.
-- Requests are limited to status, one capture, bounded schedule configuration,
+- Requests are limited to status, one capture, mount/unmount of the enrolled volume, bounded schedule configuration,
   and reading the fixed private capture log. There are no caller-supplied paths,
   executable names, shell commands, device identities or firmware operations.
 - The daemon runs only its fixed, root-owned collector front door with a clean
@@ -55,10 +55,29 @@ other console users are skipped. This service does not collect before login.
 
 ## Local data and removal
 
+The desktop and menu-bar controls unmount only the enrolled APFS volume, not
+every volume on a disk. The collector revalidates its external physical store
+and enrolled USB bridge before using `diskutil`; unmount also checks Time Machine,
+open files and I/O idleness. It never forces an unmount or captures USB for these
+operations. These operations share the capture/update exclusion lock.
+
+Before unmount starts, a root-protected pause flag is saved. The selected mode
+and interval remain intact; both scheduled and manually requested captures are
+blocked while paused, even across service restarts. A successful, verified mount
+clears the flag and starts a fresh interval if automatic mode was selected.
+An unmount failure leaves collection paused until the mount action verifies
+recovery. Mounting in manual mode does not enable automatic collection.
+
+Finder eject remains usable. An externally unmounted device is skipped by the
+collector and is never auto-mounted for temperature collection. Ejecting the
+whole device may remove it from disk enumeration, requiring reconnection.
+Unmounting a volume does not switch off USB power or guarantee a cooler SSD.
+
 Successful readings are retained in the private service state (up to 500) and
 synchronized to the user's existing history while the UI runs. Raw USB pages
 stay in root-protected state. Explicitly viewing the service log saves a private
-copy in the user's app state. Neither logs nor history are uploaded.
+copy in the user's app state. The fixed service log holds the latest capture
+or volume operation. Neither logs nor history are uploaded.
 
 The settings panel provides install/update and uninstall actions. Changes to
 the privileged installation require administrator authorization again; ordinary
@@ -73,6 +92,10 @@ pages passed, and the enrolled APFS volume was verified after remount. Manual /
 automatic switching, a 60-minute countdown, cancellation of that countdown,
 invalid intervals and unknown request rejection were checked against the service.
 The UI was then exited and the service's active schedule was verified independently.
+Version 0.6 additionally completed an actual unmount/mount round trip: macOS
+reported the enrolled volume unmounted, the service rejected capture while
+paused, and the desktop Mount control restored the volume and its original
+180-minute automatic setting without reading a new SMART snapshot.
 Unit tests cover timer deadlines, overlap prevention and sleep catch-up behavior.
 These checks do not establish support for other enclosures or macOS versions.
 

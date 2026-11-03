@@ -23,37 +23,46 @@ if let data = try? Data(contentsOf: privateFile("settings.json")),
    let settings = try? JSONDecoder().decode(CaptureSettings.self, from: data), settings.valid { status.settings = settings }
 if let data = try? Data(contentsOf: privateFile("history.json")),
    let readings = try? JSONDecoder().decode([Reading].self, from: data) { status.readings = readings }
+status.volumePaused = (try? Data(contentsOf: privateFile("volume-paused.json"))).flatMap { try? JSONDecoder().decode(Bool.self, from: $0) } ?? false
+func scheduledSettings() -> CaptureSettings { status.settings.forScheduling(volumePaused: status.volumePaused == true) }
 var schedule = CaptureSchedule()
 // An interrupted previous capture requires an operator to inspect recovery; never loop on it.
 if fm.fileExists(atPath: privateFile("capture-in-progress").path) {
     status.settings.automatic = false; status.result = "interrupted"; try? save(status.settings, "settings.json")
 }
-schedule.reset(status.settings, now: Date())
+schedule.reset(scheduledSettings(), now: Date())
 var process: Process?
 var lastManual: Date?
 let captureLock = open(privateFile("capture.lock").path, O_CREAT | O_RDWR | O_NOFOLLOW, 0o600)
 guard captureLock >= 0 else { exit(73) }
 
-func beginCapture() {
+func beginCapture(operation: String = "capture") {
+    let isCapture = operation == "capture"
     guard !status.busy else { return }
     // USB interfaces need the enrolled user's console audit session as well as
     // root device-capture authority. Never inherit a different user's session.
     var console = stat()
     guard stat("/dev/console", &console) == 0, console.st_uid == owner else {
-        status.result = "skippedSession"; schedule.reset(status.settings, now: Date()); return
+        status.result = "skippedSession"; schedule.reset(scheduledSettings(), now: Date()); return
     }
     guard flock(captureLock, LOCK_EX | LOCK_NB) == 0 else {
-        status.result = "maintenance"; schedule.reset(status.settings, now: Date()); return
+        status.result = "maintenance"; schedule.reset(scheduledSettings(), now: Date()); return
     }
-    status.busy = true; status.lastAttempt = Date(); status.result = "capturing"
-    schedule.reset(status.settings, now: Date())
+    status.busy = true
+    if isCapture { status.lastAttempt = Date() }
+    status.result = isCapture ? "capturing" : operation == "mount" ? "mounting" : "unmounting"
+    schedule.reset(scheduledSettings(), now: Date())
     do {
-        try Data().write(to: privateFile("capture-in-progress"), options: .atomic)
+        if isCapture { try Data().write(to: privateFile("capture-in-progress"), options: .atomic) }
+        if operation == "unmount" {
+            try save(true, "volume-paused.json"); status.volumePaused = true
+            schedule.reset(scheduledSettings(), now: Date())
+        }
         let logURL = privateFile("last-capture.log")
         fm.createFile(atPath: logURL.path, contents: nil, attributes: [.posixPermissions: 0o600])
         let log = try FileHandle(forWritingTo: logURL)
         let p = Process(); p.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-        p.arguments = ["asuser", String(owner), "/bin/bash", ServicePaths.root + "/collector/rtl9210-health", "service-probe"]
+        p.arguments = ["asuser", String(owner), "/bin/bash", ServicePaths.root + "/collector/rtl9210-health", isCapture ? "service-probe" : "service-" + operation]
         p.environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": "/var/root", "LC_ALL": "C"]
         p.standardInput = FileHandle.nullDevice; p.standardOutput = log; p.standardError = log
         p.terminationHandler = { child in
@@ -62,6 +71,16 @@ func beginCapture() {
                 defer { flock(captureLock, LOCK_UN) }
                 process = nil; status.busy = false
                 let text = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
+                if !isCapture {
+                    if child.terminationStatus == 0 {
+                        if operation == "mount" {
+                            do { try save(false, "volume-paused.json"); status.volumePaused = false; status.result = "mounted" }
+                            catch { status.result = "volumeFailed" }
+                        } else { status.result = "unmounted" }
+                    } else { status.result = "volumeFailed" }
+                    schedule.reset(scheduledSettings(), now: Date())
+                    return
+                }
                 if child.terminationStatus == 0 {
                     let run = privateFile("latest").resolvingSymlinksInPath()
                     let format = DateFormatter(); format.locale = Locale(identifier: "en_US_POSIX"); format.dateFormat = "yyyyMMdd_HHmmss"
@@ -85,14 +104,14 @@ func beginCapture() {
                 try? save(status.settings, "settings.json")
                 if status.result == "success" || status.result.hasPrefix("skipped") { try? fm.removeItem(at: privateFile("capture-in-progress")) }
                 // Failure keeps the marker and pauses automation; explicit manual retry is still possible.
-                schedule.reset(status.settings, now: Date())
+                schedule.reset(scheduledSettings(), now: Date())
             }
         }
         process = p; try p.run()
     } catch {
         flock(captureLock, LOCK_UN)
         status.busy = false; process = nil; status.result = "launchFailed"; status.settings.automatic = false
-        try? save(status.settings, "settings.json"); schedule.reset(status.settings, now: Date())
+        try? save(status.settings, "settings.json"); schedule.reset(scheduledSettings(), now: Date())
     }
 }
 func handle(_ request: ServiceRequest) -> ServiceStatus {
@@ -100,16 +119,21 @@ func handle(_ request: ServiceRequest) -> ServiceStatus {
     switch request.command {
     case "status", "log": break
     case "configure":
-        if let settings = request.settings, settings.valid {
+        if status.busy { requestError = "busy" }
+        else if let settings = request.settings, settings.valid {
             if settings.automatic && !status.busy && fm.fileExists(atPath: privateFile("capture-in-progress").path) {
                 requestError = "recoveryRequired"
             } else {
-                do { try save(settings, "settings.json"); status.settings = settings; schedule.reset(settings, now: Date()) }
+                do { try save(settings, "settings.json"); status.settings = settings; schedule.reset(scheduledSettings(), now: Date()) }
                 catch { requestError = "saveFailed" }
             }
         } else { requestError = "invalidSettings" }
+    case "mount", "unmount":
+        if status.busy { requestError = "busy" }
+        else { beginCapture(operation: request.command) }
     case "capture":
         if status.busy { requestError = "busy" }
+        else if status.volumePaused == true { requestError = "volumePaused" }
         else if let lastManual, Date().timeIntervalSince(lastManual) < 60 { requestError = "rateLimited" }
         else { lastManual = Date(); beginCapture() }
     default: requestError = "unknownCommand"
@@ -123,7 +147,7 @@ func handle(_ request: ServiceRequest) -> ServiceStatus {
 let timer = DispatchSource.makeTimerSource(queue: queue)
 timer.schedule(deadline: .now() + 15, repeating: 15)
 timer.setEventHandler {
-    if schedule.due(status.settings, now: Date(), busy: status.busy) { beginCapture() }
+    if schedule.due(scheduledSettings(), now: Date(), busy: status.busy) { beginCapture() }
 }
 timer.resume()
 let server = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)

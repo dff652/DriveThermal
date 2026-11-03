@@ -30,7 +30,7 @@ final class DriveModel: ObservableObject {
         let file = resource.appendingPathComponent("collector/rtl9210-health")
         return FileManager.default.isExecutableFile(atPath: file.path) ? file : nil
     }
-    var canCapture: Bool { !busy && !serviceChecking && !installingService && mount.mounted && enrollment != nil && (collectorURL != nil || serviceStatus != nil) }
+    var canCapture: Bool { !busy && !serviceChecking && !installingService && serviceStatus?.volumePaused != true && mount.mounted && enrollment != nil && (collectorURL != nil || serviceStatus != nil) }
     var enrollment: Enrollment?
     var onChange: (() -> Void)?
     var timer: Timer?
@@ -40,7 +40,14 @@ final class DriveModel: ObservableObject {
     var captureHelp: String {
         serviceStatus != nil ? "使用已批准的后台服务采集，无需再次输入密码。仍会暂时卸载硬盘，请先关闭该盘的文件。" : collectorURL == nil ? "此构建未包含采集后端，可查看已有记录。采集功能需另行配置已授权的兼容后端。" : "通过 NVMe SMART 读取 SSD 综合温度与健康信息。读取时会暂时卸载硬盘并请求管理员验证，完成后自动恢复。请先关闭该盘的文件。"
     }
-    var mountLabel: String { busy ? "采集中 · 稍后恢复挂载" : (mount.mounted ? "已挂载" : mount.connected ? "未挂载" : "未连接") }
+    var mountLabel: String {
+        if busy {
+            if serviceStatus?.result == "mounting" { return "正在挂载" }
+            if serviceStatus?.result == "unmounting" { return "正在卸载" }
+            return "采集中 · 稍后恢复挂载"
+        }
+        return mount.mounted ? "已挂载" : mount.connected ? "未挂载" : "未连接"
+    }
     var age: String {
         guard let r = last else { return "尚无采集记录" }
         let seconds = max(0, Int(now.timeIntervalSince(r.capturedAt)))
@@ -351,7 +358,7 @@ struct MainView: View {
                 .help("查看已保存的温度记录与趋势")
             }
             HStack(spacing: 10) {
-                Button(model.busy ? "正在采集…" : "读取温度") { model.capture() }
+                Button(model.busy ? "处理中…" : "读取温度") { model.capture() }
                     .buttonStyle(.borderedProminent).tint(.teal).controlSize(.large)
                     .disabled(!model.canCapture)
                     .help(model.captureHelp)
@@ -367,6 +374,9 @@ struct MainView: View {
                         }.font(.system(size: 12)).padding(18).frame(width: 300)
                     }
                 Spacer()
+                Button { model.toggleVolume() } label: {
+                    Label(model.volumeActionTitle, systemImage: model.wantsMount ? "externaldrive.badge.plus" : "eject")
+                }.buttonStyle(.bordered).disabled(!model.canManageVolume).help(model.volumeHelp)
                 Menu {
                     Button("采集模式与间隔…") { model.showSettings() }
                     Button("在 Finder 中打开硬盘") { model.openDisk() }.disabled(!model.mount.mounted || model.busy)
@@ -575,6 +585,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         menu.addItem(.separator())
         let show = menu.addItem(withTitle: "显示桌面小窗", action: #selector(showWindow), keyEquivalent: ""); show.target = self
         let capture = menu.addItem(withTitle: "读取温度（会暂时卸载硬盘）", action: #selector(capture), keyEquivalent: ""); capture.target = self; capture.isEnabled = model.canCapture
+        let volume = menu.addItem(withTitle: model.wantsMount ? "挂载宗卷并恢复采集模式" : "卸载宗卷并暂停采集", action: #selector(toggleVolume), keyEquivalent: "")
+        volume.target = self; volume.isEnabled = model.canManageVolume; volume.toolTip = model.volumeHelp
         menu.addItem(.separator())
         let about = menu.addItem(withTitle: "关于 DriveThermal \(BuildInfo.current.version)", action: #selector(showAbout), keyEquivalent: ""); about.target = self
         let diagnostics = menu.addItem(withTitle: "导出脱敏诊断报告…", action: #selector(exportDiagnostics), keyEquivalent: ""); diagnostics.target = self
@@ -586,13 +598,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc func showWindow() { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
     @objc func showSettings() { showWindow(); model.showSettings() }
     @objc func capture() { showWindow(); model.capture() }
+    @objc func toggleVolume() { showWindow(); model.toggleVolume() }
     @objc func showAbout() { showWindow(); model.historyVisible = false; model.aboutVisible = true }
     @objc func exportDiagnostics() { showWindow(); model.exportDiagnostics() }
     @objc func openLogs() { model.openLog() }
     @objc func quit() { NSApp.terminate(nil) }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if model.busy {
-            let alert = NSAlert(); alert.messageText = "请等待采集和恢复挂载完成"; alert.informativeText = "完成后即可退出 DriveThermal。"; alert.runModal()
+            let alert = NSAlert(); alert.messageText = "请等待当前磁盘操作完成"; alert.informativeText = "完成后即可退出 DriveThermal。"; alert.runModal()
             return .terminateCancel
         }
         return .terminateNow
