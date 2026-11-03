@@ -79,3 +79,22 @@ let many = (0..<40).map { i -> Reading in var r = good!; r.id = String(i); r.cap
 let recentSeries = TemperatureSeries(readings: many.reversed())
 check(recentSeries.values.count == 30 && recentSeries.values.first?.id == "10" && recentSeries.values.last?.id == "39", "chart does not show latest 30 points")
 print("Temperature chart domains: 4 checks passed")
+
+var scheduleTest = CaptureSchedule()
+let autoSettings = CaptureSettings(automatic: true, intervalMinutes: 30)
+let start = Date(timeIntervalSince1970: 1000)
+scheduleTest.reset(autoSettings, now: start)
+check(scheduleTest.next == start.addingTimeInterval(1800), "interval incorrect")
+for offset in stride(from: 15, to: 1800, by: 15) {
+    check(!scheduleTest.due(autoSettings, now: start.addingTimeInterval(Double(offset)), busy: false), "timer fired early")
+}
+check(scheduleTest.due(autoSettings, now: start.addingTimeInterval(1800), busy: false), "timer did not fire")
+check(!scheduleTest.due(autoSettings, now: start.addingTimeInterval(7200), busy: false), "sleep caused catch-up capture")
+check(scheduleTest.next == start.addingTimeInterval(9000), "wake interval not reset")
+scheduleTest.reset(CaptureSettings(), now: start)
+check(scheduleTest.next == nil && !scheduleTest.due(CaptureSettings(), now: start.addingTimeInterval(99999), busy: false), "manual mode scheduled capture")
+check(!CaptureSettings(automatic: true, intervalMinutes: 0).valid && !CaptureSettings(automatic: true, intervalMinutes: 1441).valid, "invalid interval accepted")
+scheduleTest.reset(autoSettings, now: start)
+scheduleTest.lastTick = start.addingTimeInterval(1790)
+check(!scheduleTest.due(autoSettings, now: start.addingTimeInterval(1800), busy: true) && scheduleTest.next == start.addingTimeInterval(3600), "overlapping or backlog capture")
+print("Background schedule: 7 checks passed")

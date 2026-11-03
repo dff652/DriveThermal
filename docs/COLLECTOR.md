@@ -12,6 +12,15 @@ The private build expects an executable at
 UI, must handle local administrator authorization and all hardware safety checks.
 The UI never receives or stores an administrator password.
 
+The optional privileged service installs a separate root-owned copy and calls
+its fixed front door with `service-probe`, without environment-selected paths.
+This entry point is accepted only as root at the designated installation path,
+with a root-owned profile, binary and state directory. It performs the same
+guarded capture as the interactive path, using the authority established by the
+installer instead of requesting a password for each capture. This adapter is
+local-only and remains excluded from the public bundle. See
+[Background service](BACKGROUND_SERVICE.md) for the IPC and scheduling contract.
+
 Environment passed to the backend:
 
 - `DRIVETHERMAL_STATE`: private application-state directory.

@@ -67,7 +67,7 @@ struct DiagnosticReport {
                      "macOS: \(os)", "Collector bundled: \(build.bundledCollector)",
                      "Collector available: \(collectorAvailable)", "Enrolled: \(enrolled)",
                      "Mounted: \(mounted)", "Capture in progress: \(busy)",
-                     "Temperature mode: manual snapshot"]
+                     "Temperature mode: timestamped snapshot"]
         if let r = reading {
             lines += ["Last capture UTC: \(iso.string(from: r.capturedAt))", "Last temperature C: \(r.celsius)",
                       "Last critical warning: \(r.warning)"]

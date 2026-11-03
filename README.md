@@ -1,10 +1,10 @@
 # DriveThermal
 
 A lightweight macOS desktop window and menu-bar companion for **timestamped SSD
-temperature snapshots**. 中文界面，支持手动采集、历史记录及脱敏诊断。
+temperature snapshots**. 中文界面，支持手动／定时采集、历史记录及脱敏诊断。
 
 > **Public release scope:** this repository contains the UI, data parser,
-> diagnostics and collector integration contract. It does **not** include a USB
+> diagnostics, optional service/installer and collector integration contract. It does **not** include a USB
 > SMART collector. A clean checkout can build and run the UI, but cannot obtain
 > fresh disk temperatures until an authorized compatible backend and enrollment
 > are provided. No claim of universal USB SSD support is made.
@@ -20,12 +20,13 @@ temperature snapshots**. 中文界面，支持手动采集、历史记录及脱�
 - Lifetime I/O totals are not live throughput; no background benchmark is performed.
 - Version, build revision, maintainer link and project link in About.
 - Local application event log, collector-log access and allowlisted diagnostic export.
+- Optional authorized background capture, manual/automatic switching and configurable 30–1440 minute intervals.
 - No telemetry, accounts or automatic uploads. GitHub links open only when clicked.
 
 ## 为什么温度不是实时刷新？
 
 本地验证过的 USB NVMe 采集方式需要短暂卸载磁盘、接管 USB 接口，完成后恢复挂载。
-因此 DriveThermal 不自动轮询温度。菜单栏显示的是**上次读数**，提示和窗口注明时间。
+因此 DriveThermal 不高频轮询温度。可选后台服务支持 30–1440 分钟的定时采集，磁盘忙碌时跳过。菜单栏显示的是**上次读数**，提示和窗口注明时间。
 关闭小窗仍保留菜单栏；从菜单栏退出应用。
 
 ## Build / 构建
@@ -68,7 +69,7 @@ to open About, inspect history or export a diagnostic report.
 
 ## Status
 
-Version 0.4.0 is an early, UI-first public release. The private local collector
+Version 0.5.0 is an early, UI-first public release. The private local collector
 integration was validated on one Apple Silicon Mac and one Realtek 0BDA:9210
 NVMe enclosure; that does not establish compatibility for other disks or bridges.
 
@@ -83,3 +84,10 @@ Special thanks to [RazeBerry/rtl9210-health-monitor](https://github.com/RazeBerr
 for the USB transport and NVMe health-reading implementation used by the private
 local collector adaptation. Attribution does not change the redistribution
 boundaries described in THIRD_PARTY_NOTICES.md.
+
+## Optional background service
+
+Local collector builds include a first-authorization installer and a mode/interval
+settings panel. Manual remains the initial default. See
+[background service design](docs/BACKGROUND_SERVICE.md) for authority boundaries,
+sleep behavior, scheduling, update and removal.

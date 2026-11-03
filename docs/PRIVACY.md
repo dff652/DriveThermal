@@ -20,3 +20,9 @@ excludes model and volume names, serials, UUIDs, user paths, lifetime health
 counters, raw logs and raw binary pages. The report is written only to a path
 selected in the save dialog, never uploaded automatically. Timestamps and OS
 version are still included: review before sharing.
+
+Optional background service state and raw logs are stored in the root-protected
+`/Library/Application Support/DriveThermalService/state` directory. The enrolled
+local account can request its readings and capture log through the limited local
+socket API. Viewing the log explicitly copies it to the user app state; it is
+not included in the allowlisted diagnostic export.

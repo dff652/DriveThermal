@@ -1,6 +1,7 @@
 # Source and licensing boundaries
 
-The tracked Swift UI, diagnostic helpers, tests, build scripts and documentation
+The tracked Swift UI, diagnostic helpers, background service and installer,
+tests, build scripts and documentation
 in this repository are provided under the MIT license by dff652.
 
 A private local installation was validated using an adapted copy of

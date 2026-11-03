@@ -15,6 +15,12 @@ final class DriveModel: ObservableObject {
     @Published var aboutVisible = false
     @Published var detailsVisible = false
     @Published var helpVisible = false
+    @Published var settingsVisible = false
+    @Published var serviceStatus: ServiceStatus? = nil
+    @Published var serviceChecking = false
+    @Published var installingService = false
+    @Published var draftAutomatic = false
+    @Published var draftMinutes = 180
     @Published var pinned = false
     @Published var now = Date()
     let state = appStateURL
@@ -24,7 +30,7 @@ final class DriveModel: ObservableObject {
         let file = resource.appendingPathComponent("collector/rtl9210-health")
         return FileManager.default.isExecutableFile(atPath: file.path) ? file : nil
     }
-    var canCapture: Bool { !busy && mount.mounted && enrollment != nil && collectorURL != nil }
+    var canCapture: Bool { !busy && !serviceChecking && !installingService && mount.mounted && enrollment != nil && (collectorURL != nil || serviceStatus != nil) }
     var enrollment: Enrollment?
     var onChange: (() -> Void)?
     var timer: Timer?
@@ -32,7 +38,7 @@ final class DriveModel: ObservableObject {
     var last: Reading? { readings.last }
     var name: String { enrollment?.name ?? "尚未登记硬盘" }
     var captureHelp: String {
-        collectorURL == nil ? "此构建未包含采集后端，可查看已有记录。采集功能需另行配置已授权的兼容后端。" : "通过 NVMe SMART 读取 SSD 综合温度与健康信息。读取时会暂时卸载硬盘并请求管理员验证，完成后自动恢复。请先关闭该盘的文件。"
+        serviceStatus != nil ? "使用已批准的后台服务采集，无需再次输入密码。仍会暂时卸载硬盘，请先关闭该盘的文件。" : collectorURL == nil ? "此构建未包含采集后端，可查看已有记录。采集功能需另行配置已授权的兼容后端。" : "通过 NVMe SMART 读取 SSD 综合温度与健康信息。读取时会暂时卸载硬盘并请求管理员验证，完成后自动恢复。请先关闭该盘的文件。"
     }
     var mountLabel: String { busy ? "采集中 · 稍后恢复挂载" : (mount.mounted ? "已挂载" : mount.connected ? "未挂载" : "未连接") }
     var age: String {
@@ -54,9 +60,10 @@ final class DriveModel: ObservableObject {
         }
         eventLog.record(.appStarted)
         importLatest()
+        refreshService()
         refreshMount()
         timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
-            self?.now = Date(); self?.refreshMount(); self?.onChange?()
+            self?.now = Date(); self?.refreshService(); self?.refreshMount(); self?.onChange?()
         }
     }
     func importLatest() {
@@ -100,7 +107,15 @@ final class DriveModel: ObservableObject {
         }
     }
     func capture() {
-        guard canCapture, let script = collectorURL else { return }
+        guard canCapture else { return }
+        if serviceStatus != nil {
+            sendService(ServiceRequest(command: "capture")); return
+        }
+        // An installed but disconnected service must not race the legacy front door.
+        if FileManager.default.fileExists(atPath: ServicePaths.plist) {
+            message = "后台服务暂不可用，请先检查服务，避免重复采集。"; onChange?(); return
+        }
+        guard let script = collectorURL else { return }
         busy = true; message = nil; now = Date(); onChange?()
         let oldID = last?.id
         eventLog.record(.captureRequested)
@@ -147,6 +162,7 @@ final class DriveModel: ObservableObject {
         NSWorkspace.shared.open(URL(fileURLWithPath: e.mountPath))
     }
     func openLog() {
+        if serviceStatus != nil { sendService(ServiceRequest(command: "log")); return }
         let file = state.appendingPathComponent("last-capture.log")
         if FileManager.default.fileExists(atPath: file.path) { NSWorkspace.shared.open(file) }
         else { message = "尚无采集日志。"; onChange?() }
@@ -244,7 +260,7 @@ struct HistoryView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("温度记录").font(.title2.bold())
-            Text("每个点都是一次手动采集，不代表连续温度。").font(.caption).foregroundStyle(.secondary)
+            Text("每个点都是一次成功采集，不代表连续温度。").font(.caption).foregroundStyle(.secondary)
             TemperatureChart(readings: readings, compact: false)
             List(readings.reversed()) { r in
                 HStack {
@@ -310,6 +326,14 @@ struct MainView: View {
                 }.padding(.top, 4)
             }
             TemperatureChart(readings: model.readings)
+            Button { model.showSettings() } label: {
+                HStack {
+                    Image(systemName: "clock.arrow.circlepath")
+                    Text(model.modeDescription).font(.system(size: 11))
+                    Spacer()
+                    Text("设置").font(.system(size: 11, weight: .semibold))
+                }
+            }.buttonStyle(.borderless)
             if let message = model.message {
                 Text(message).font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     .padding(10).frame(maxWidth: .infinity, alignment: .leading).background(Color.primary.opacity(0.05)).clipShape(RoundedRectangle(cornerRadius: 8))
@@ -338,12 +362,13 @@ struct MainView: View {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("采集说明").font(.headline)
                             Text(model.captureHelp)
-                            Text("手动采集 · 本机保存。菜单栏显示上次读数；打开详情不会重新采集。")
+                            Text("支持手动与定时采集。菜单栏显示上次读数；打开详情不会重新采集。")
                                 .foregroundStyle(.secondary)
                         }.font(.system(size: 12)).padding(18).frame(width: 300)
                     }
                 Spacer()
                 Menu {
+                    Button("采集模式与间隔…") { model.showSettings() }
                     Button("在 Finder 中打开硬盘") { model.openDisk() }.disabled(!model.mount.mounted || model.busy)
                     Button("查看采集日志") { model.openLog() }
                     Button("查看应用事件日志") { model.openEventLog() }
@@ -358,8 +383,8 @@ struct MainView: View {
                     .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(.secondary)
                 Spacer()
                 Image(systemName: "lock.shield").font(.system(size: 10)).foregroundStyle(.secondary)
-                    .help("手动采集 · 本机保存；无遥测或自动上传。")
-                    .accessibilityLabel("手动采集，本机保存")
+                    .help("采集记录保存在本机；无遥测或自动上传。")
+                    .accessibilityLabel("采集记录本机保存")
             }
         }.padding(24).frame(width: 420)
             .background(Color(nsColor: .windowBackgroundColor))
@@ -374,6 +399,9 @@ struct MainView: View {
             }
             .sheet(isPresented: $model.detailsVisible) {
                 SMARTView(model: model)
+            }
+            .sheet(isPresented: $model.settingsVisible) {
+                CaptureSettingsView(model: model)
             }
     }
     func navigationLabel(_ title: String, icon: String) -> some View {
@@ -489,7 +517,7 @@ struct AboutView: View {
                 .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Link("上游项目：RazeBerry/rtl9210-health-monitor", destination: URL(string: "https://github.com/RazeBerry/rtl9210-health-monitor")!)
                 .font(.system(size: 11))
-            Text("温度按需读取，旧读数始终标注采集时间。无遥测；诊断报告由你选择是否导出和分享。")
+            Text("支持手动与定时采集，旧读数始终标注采集时间。无遥测；诊断报告由你选择是否导出和分享。")
                 .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button("导出脱敏报告…") { model.exportDiagnostics() }
@@ -542,6 +570,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let menu = NSMenu()
         menu.addItem(withTitle: "\(model.name) · \(model.mountLabel)", action: nil, keyEquivalent: "")
         menu.addItem(withTitle: model.age, action: nil, keyEquivalent: "")
+        menu.addItem(withTitle: model.modeDescription, action: nil, keyEquivalent: "")
+        let settings = menu.addItem(withTitle: "采集模式与间隔…", action: #selector(showSettings), keyEquivalent: ""); settings.target = self
         menu.addItem(.separator())
         let show = menu.addItem(withTitle: "显示桌面小窗", action: #selector(showWindow), keyEquivalent: ""); show.target = self
         let capture = menu.addItem(withTitle: "读取温度（会暂时卸载硬盘）", action: #selector(capture), keyEquivalent: ""); capture.target = self; capture.isEnabled = model.canCapture
@@ -554,6 +584,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         menu.autoenablesItems = false; item.menu = menu
     }
     @objc func showWindow() { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
+    @objc func showSettings() { showWindow(); model.showSettings() }
     @objc func capture() { showWindow(); model.capture() }
     @objc func showAbout() { showWindow(); model.historyVisible = false; model.aboutVisible = true }
     @objc func exportDiagnostics() { showWindow(); model.exportDiagnostics() }

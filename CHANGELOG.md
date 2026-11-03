@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0 — 2026-11-03
+
+- Add an optional administrator-approved, root-owned local capture service.
+- Add manual/automatic modes, 30–1440 minute intervals, next-attempt status and service installation/removal.
+- Keep guarded collector checks; skip busy/offline disks and pause on unexpected failure.
+- Prevent overlapping captures and sleep catch-up bursts.
+- Run the guarded collector in the enrolled console session; skip captures when that user is logged out.
+- Protect updates with a capture lock and require successful manual recovery after interrupted captures.
+- Sync service readings into existing local history; expose private service logs on request.
+
 ## 0.4.0 — 2026-11-03
 
 - Show temperature history directly in the main window and a larger history chart.

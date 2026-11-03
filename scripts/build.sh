@@ -33,10 +33,19 @@ if [[ $LOCAL -eq 1 ]]; then
     rsync -a --exclude AGENTS.md --exclude runs --exclude latest --exclude device.plist \
         collector/ "$BUNDLE/Contents/Resources/collector/"
     codesign --force --sign - "$BUNDLE/Contents/Resources/collector/.build/rtl9210_health_probe"
+    PACKAGE="$BUNDLE/Contents/Resources/ServicePackage"
+    mkdir -p "$PACKAGE"
+    cp -R "$BUNDLE/Contents/Resources/collector" "$PACKAGE/collector"
+    xcrun swiftc -swift-version 5 -O -module-cache-path .build/module-cache \
+        Sources/Health.swift Sources/ServiceProtocol.swift Service/main.swift -o "$PACKAGE/DriveThermalService"
+    xcrun swiftc -swift-version 5 -O -module-cache-path .build/module-cache \
+        Sources/Health.swift Sources/ServiceProtocol.swift Service/Installer.swift -o "$PACKAGE/DriveThermalInstaller"
+    codesign --force --sign - "$PACKAGE/DriveThermalService"
+    codesign --force --sign - "$PACKAGE/DriveThermalInstaller"
 fi
 ARCH=$(uname -m)
 xcrun swiftc -swift-version 5 -O -target "$ARCH-apple-macos14.0" -module-cache-path .build/module-cache \
-    -framework AppKit -framework SwiftUI Sources/Health.swift Sources/Diagnostics.swift Sources/App.swift \
+    -framework AppKit -framework SwiftUI Sources/Health.swift Sources/Diagnostics.swift Sources/ServiceProtocol.swift Sources/ServiceClient.swift Sources/App.swift \
     -o "$BUNDLE/Contents/MacOS/DriveThermal"
 REVISION=$(git rev-parse --short HEAD 2>/dev/null || printf uncommitted)
 if ! git diff --quiet 2>/dev/null; then REVISION="$REVISION-dirty"; fi
