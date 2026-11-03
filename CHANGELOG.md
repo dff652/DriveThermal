@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0 — 2026-11-03
+
+- Show temperature history directly in the main window and a larger history chart.
+- Use actual timestamps, temperature axes, measured points and dashed connectors; handle empty, single-point and constant-temperature histories.
+- Add explicit thanks to RazeBerry/rtl9210-health-monitor in About and the README.
+
 ## 0.3.1 — 2026-11-03
 
 - Rename the navigation actions to 查看SMART详情 and 查看历史.

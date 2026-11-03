@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Charts
 import UniformTypeIdentifiers
 
 let appStateURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/DriveThermal", isDirectory: true)
@@ -170,26 +171,81 @@ final class DriveModel: ObservableObject {
     }
 }
 
+struct TemperatureChart: View {
+    let readings: [Reading]
+    var compact = true
+    var body: some View {
+        let series = TemperatureSeries(readings: readings)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("温度趋势").font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Text("最近 \(series.values.count) 次采集").font(.system(size: 10)).foregroundStyle(.secondary)
+            }
+            if series.values.isEmpty {
+                Text("尚无温度记录，成功采集后显示曲线。")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: compact ? 90 : 150)
+            } else {
+                Chart(series.values) { r in
+                    if series.values.count > 1 {
+                        LineMark(x: .value("采集时间", r.capturedAt), y: .value("温度 °C", r.celsius))
+                            .interpolationMethod(.linear)
+                            .lineStyle(StrokeStyle(lineWidth: 2, dash: [4, 3]))
+                            .foregroundStyle(Color.teal.opacity(0.75))
+                    }
+                    PointMark(x: .value("采集时间", r.capturedAt), y: .value("温度 °C", r.celsius))
+                        .symbolSize(38).foregroundStyle(Color.teal)
+                        .annotation(position: .top) {
+                            if r.id == series.values.last?.id {
+                                Text("\(Int(r.celsius.rounded())) °C")
+                                    .font(.system(size: 10, weight: .semibold)).foregroundStyle(Color.primary)
+                            }
+                        }
+                        .accessibilityLabel(r.capturedAt.formatted(date: .abbreviated, time: .standard))
+                        .accessibilityValue("\(r.celsius) 摄氏度")
+                }
+                .chartXScale(domain: series.timeRange)
+                .chartYScale(domain: series.temperatureRange)
+                .chartYAxis {
+                    AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let degrees = value.as(Double.self) { Text("\(Int(degrees))°") }
+                        }
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: compact ? 3 : 4)) { value in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let date = value.as(Date.self) {
+                                if series.spansDays {
+                                    Text(date, format: .dateTime.month().day().hour().minute())
+                                } else {
+                                    Text(date, format: .dateTime.hour().minute())
+                                }
+                            }
+                        }
+                    }
+                }
+                .frame(height: compact ? 100 : 170)
+                .padding(.top, 4)
+                .help(series.values.map { "\($0.capturedAt.formatted(date: .abbreviated, time: .standard)) · \(Int($0.celsius.rounded())) °C" }.joined(separator: "\n"))
+                Text(series.values.count == 1 ? "仅 1 个采样点，下一次采集后形成连线。" : "圆点为实测值，虚线仅连接采样点，不代表连续监测。")
+                    .font(.system(size: 10)).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
 struct HistoryView: View {
     let readings: [Reading]
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("温度记录").font(.title2.bold())
             Text("每个点都是一次手动采集，不代表连续温度。").font(.caption).foregroundStyle(.secondary)
-            if readings.count > 1 {
-                GeometryReader { g in
-                    let values = Array(readings.suffix(30))
-                    let low = (values.map(\.celsius).min() ?? 0) - 3
-                    let high = (values.map(\.celsius).max() ?? 0) + 3
-                    Path { path in
-                        for (index, v) in values.enumerated() {
-                            let point = CGPoint(x: CGFloat(index) / CGFloat(max(1, values.count - 1)) * g.size.width,
-                                y: g.size.height * (1 - (v.celsius - low) / (high - low)))
-                            if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
-                        }
-                    }.stroke(Color.teal, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
-                }.frame(height: 70).padding(.vertical, 10)
-            }
+            TemperatureChart(readings: readings, compact: false)
             List(readings.reversed()) { r in
                 HStack {
                     Text(r.capturedAt.formatted(date: .abbreviated, time: .standard)).font(.system(size: 12, design: .monospaced))
@@ -197,7 +253,7 @@ struct HistoryView: View {
                     Text("\(Int(r.celsius.rounded())) °C").font(.headline)
                 }.padding(.vertical, 4)
             }.listStyle(.plain)
-        }.padding(22).frame(width: 460, height: 400)
+        }.padding(22).frame(width: 500, height: 500)
     }
 }
 
@@ -253,6 +309,7 @@ struct MainView: View {
                     metric("介质错误", model.last?.errors.map(String.init) ?? "—")
                 }.padding(.top, 4)
             }
+            TemperatureChart(readings: model.readings)
             if let message = model.message {
                 Text(message).font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     .padding(10).frame(maxWidth: .infinity, alignment: .leading).background(Color.primary.opacity(0.05)).clipShape(RoundedRectangle(cornerRadius: 8))
@@ -428,7 +485,9 @@ struct AboutView: View {
             Divider()
             Text(model.collectorURL == nil ? "此构建仅包含界面与采集接口。USB 采集后端未包含在公开源码中。" : "本机采集器基于 rtl9210-health-monitor 并作适配。其上游尚无明确许可证，未纳入公开仓库。")
                 .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Link("采集器来源：RazeBerry/rtl9210-health-monitor", destination: URL(string: "https://github.com/RazeBerry/rtl9210-health-monitor")!)
+            Text("特别感谢 RazeBerry 的 rtl9210-health-monitor 项目，为本机 RTL9210 采集适配提供了 USB 传输与 NVMe 健康数据读取实现。")
+                .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Link("上游项目：RazeBerry/rtl9210-health-monitor", destination: URL(string: "https://github.com/RazeBerry/rtl9210-health-monitor")!)
                 .font(.system(size: 11))
             Text("温度按需读取，旧读数始终标注采集时间。无遥测；诊断报告由你选择是否导出和分享。")
                 .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

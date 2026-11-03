@@ -13,7 +13,7 @@ temperature snapshots**. 中文界面，支持手动采集、历史记录及脱�
 
 - Desktop window, optional always-on-top, and menu-bar temperature display.
 - Last-captured temperature and explicit timestamp; no misleading live readings.
-- Up to 500 local history entries; plot of the latest 30 observations.
+- Up to 500 local history entries; main-window and history charts show the latest 30 observations on a real time axis, with temperature ticks and measured points.
 - Passive mount-state and capacity refresh every 15 seconds (APFS shared-container space).
 - SMART details: firmware, spare capacity, lifetime read/write totals, power cycles and error counts.
 - Compact collection-help popover and native hover tooltips.
@@ -68,7 +68,7 @@ to open About, inspect history or export a diagnostic report.
 
 ## Status
 
-Version 0.3.1 is an early, UI-first public release. The private local collector
+Version 0.4.0 is an early, UI-first public release. The private local collector
 integration was validated on one Apple Silicon Mac and one Realtek 0BDA:9210
 NVMe enclosure; that does not establish compatibility for other disks or bridges.
 
@@ -76,3 +76,10 @@ Maintainer: [dff652](https://github.com/dff652).
 
 MIT applies to the code distributed in this repository. See [LICENSE](LICENSE)
 and [third-party notices](THIRD_PARTY_NOTICES.md).
+
+## Acknowledgements / 致谢
+
+Special thanks to [RazeBerry/rtl9210-health-monitor](https://github.com/RazeBerry/rtl9210-health-monitor)
+for the USB transport and NVMe health-reading implementation used by the private
+local collector adaptation. Attribution does not change the redistribution
+boundaries described in THIRD_PARTY_NOTICES.md.

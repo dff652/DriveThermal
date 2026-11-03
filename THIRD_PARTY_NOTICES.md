@@ -15,5 +15,5 @@ that upstream project and does not claim authorship of its USB implementation.
 local backend. It is not a redistribution permission. Do not publish a bundle
 containing that backend without resolving its license first.
 
-AppKit, SwiftUI, Foundation, UniformTypeIdentifiers and SF Symbols are system SDK
+AppKit, SwiftUI, Swift Charts, Foundation, UniformTypeIdentifiers and SF Symbols are system SDK
 components supplied by Apple and remain subject to Apple's terms.

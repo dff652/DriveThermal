@@ -109,3 +109,23 @@ struct MountState {
                           totalBytes: total.flatMap { $0 > 0 ? $0 : nil }, isAPFS: apfs)
     }
 }
+
+// Axes use actual capture dates; no fabricated samples or extrapolation to now.
+struct TemperatureSeries {
+    let values: [Reading]
+    let timeRange: ClosedRange<Date>
+    let temperatureRange: ClosedRange<Double>
+    let spansDays: Bool
+    init(readings: [Reading]) {
+        values = Array(readings.filter { $0.celsius.isFinite && (-40...150).contains($0.celsius) && $0.capturedAt.timeIntervalSinceReferenceDate.isFinite }
+            .sorted { $0.capturedAt < $1.capturedAt }.suffix(30))
+        let first = values.first?.capturedAt ?? Date(timeIntervalSince1970: 0)
+        let last = values.last?.capturedAt ?? first
+        let padding = max(60, last.timeIntervalSince(first) * 0.08)
+        timeRange = first.addingTimeInterval(-padding)...last.addingTimeInterval(padding)
+        let low = values.map(\.celsius).min() ?? 40
+        let high = values.map(\.celsius).max() ?? 40
+        temperatureRange = floor(low - 3)...ceil(high + 3)
+        spansDays = !Calendar.current.isDate(first, inSameDayAs: last)
+    }
+}

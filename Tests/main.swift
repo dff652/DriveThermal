@@ -67,3 +67,15 @@ check(!MountState.parse(try mountData(fields), expected: enrollment).connected, 
 fields["VolumeUUID"] = uuid; fields["APFSContainerFree"] = 2000000000
 check(MountState.parse(try mountData(fields), expected: enrollment).freeBytes == nil, "impossible capacity accepted")
 print("SMART expansion, history migration, privacy and capacity: 9 checks passed")
+
+let emptySeries = TemperatureSeries(readings: [])
+check(emptySeries.values.isEmpty && emptySeries.temperatureRange.lowerBound < emptySeries.temperatureRange.upperBound, "empty chart invalid")
+let singleSeries = TemperatureSeries(readings: [good!])
+check(singleSeries.timeRange.contains(date) && singleSeries.timeRange.lowerBound < date && singleSeries.timeRange.upperBound > date, "singleton chart has no time range")
+var later = good!; later.id = "later"; later.capturedAt = date.addingTimeInterval(3600)
+let flatSeries = TemperatureSeries(readings: [later, good!])
+check(flatSeries.values.map(\.id) == [good!.id, "later"] && flatSeries.temperatureRange == 41...47 && flatSeries.values.last!.capturedAt.timeIntervalSince(flatSeries.values.first!.capturedAt) == 3600, "constant or irregular-time chart altered samples")
+let many = (0..<40).map { i -> Reading in var r = good!; r.id = String(i); r.capturedAt = date.addingTimeInterval(Double(i * i)); return r }
+let recentSeries = TemperatureSeries(readings: many.reversed())
+check(recentSeries.values.count == 30 && recentSeries.values.first?.id == "10" && recentSeries.values.last?.id == "39", "chart does not show latest 30 points")
+print("Temperature chart domains: 4 checks passed")
