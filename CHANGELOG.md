@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 — 2026-11-03
+
+- Add system capacity and available space, explicitly labelled as shared-container space for APFS.
+- Add a scrollable SMART detail sheet with firmware, spare capacity, lifetime I/O totals, power cycles and error counters.
+- Enrich the latest saved snapshot without another hardware probe; older history remains readable.
+- Move static collection/privacy explanations into tooltips and a clickable information popover.
+- Preserve visible capture failures and snapshot timestamps; do not imply live temperature or a guaranteed health score.
+
 ## 0.2.0 — 2026-11-03
 
 - Add About with version/build/revision, maintainer and repository links.

@@ -56,3 +56,15 @@ Either obtain an explicit redistribution license for the original collector,
 or integrate an appropriately licensed implementation and preserve its notices.
 Only after that can a complete USB-capable bundle be published. Current public
 builds intentionally omit the unlicensed implementation.
+
+## Optional snapshot fields
+
+The parser also accepts `Firmware`, `Available Spare Threshold`,
+`Data Units Read (x512,000B)`, `Data Units Written (x512,000B)`,
+`Host Read Commands`, `Host Write Commands`, `Controller Busy Time (min)`,
+`Power Cycles`, `Unsafe Shutdowns`, and `Error Info Log Entries`.
+Counters remain decimal strings to preserve NVMe 128-bit values. Missing fields
+render as unavailable; opening details never invokes the collector.
+Lifetime I/O uses 512,000 bytes per data unit and decimal GB/TB.
+
+Field semantics: [NVMe SMART / Health Information](https://learn.microsoft.com/en-us/windows/win32/api/nvme/ns-nvme-nvme_health_info_log).

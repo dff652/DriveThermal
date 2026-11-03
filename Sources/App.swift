@@ -12,6 +12,8 @@ final class DriveModel: ObservableObject {
     @Published var checking = false
     @Published var historyVisible = false
     @Published var aboutVisible = false
+    @Published var detailsVisible = false
+    @Published var helpVisible = false
     @Published var pinned = false
     @Published var now = Date()
     let state = appStateURL
@@ -28,6 +30,9 @@ final class DriveModel: ObservableObject {
     var activeProcess: Process?
     var last: Reading? { readings.last }
     var name: String { enrollment?.name ?? "尚未登记硬盘" }
+    var captureHelp: String {
+        collectorURL == nil ? "此构建未包含采集后端，可查看已有记录。采集功能需另行配置已授权的兼容后端。" : "通过 NVMe SMART 读取 SSD 综合温度与健康信息。读取时会暂时卸载硬盘并请求管理员验证，完成后自动恢复。请先关闭该盘的文件。"
+    }
     var mountLabel: String { busy ? "采集中 · 稍后恢复挂载" : (mount.mounted ? "已挂载" : mount.connected ? "未挂载" : "未连接") }
     var age: String {
         guard let r = last else { return "尚无采集记录" }
@@ -62,16 +67,20 @@ final class DriveModel: ObservableObject {
         let format = DateFormatter(); format.locale = Locale(identifier: "en_US_POSIX"); format.dateFormat = "yyyyMMdd_HHmmss"
         guard let date = format.date(from: run.lastPathComponent),
               let item = Reading.parse(summary: text, id: run.lastPathComponent, date: date) else { return }
-        if !readings.contains(where: { $0.id == item.id }) {
+        // Enrich an existing snapshot after an app upgrade without another USB probe.
+        if let index = readings.firstIndex(where: { $0.id == item.id }), readings[index] == item { return }
+        if let index = readings.firstIndex(where: { $0.id == item.id }) {
+            readings[index] = item
+        } else {
             eventLog.record(.historyImported)
             readings.append(item); readings.sort { $0.capturedAt < $1.capturedAt }
-            if readings.count > 500 { readings.removeFirst(readings.count - 500) }
-            do {
-                let url = state.appendingPathComponent("history.json")
-                try JSONEncoder().encode(readings).write(to: url, options: .atomic)
-                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-            } catch { message = "读数已取得，但历史记录保存失败。" }
         }
+        if readings.count > 500 { readings.removeFirst(readings.count - 500) }
+        do {
+            let url = state.appendingPathComponent("history.json")
+            try JSONEncoder().encode(readings).write(to: url, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        } catch { message = "读数已取得，但历史记录保存失败。" }
     }
     func refreshMount() {
         guard !busy, !checking, let e = enrollment else { return }
@@ -232,19 +241,17 @@ struct MainView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18))
             VStack(spacing: 12) {
                 detail("连接状态", model.mountLabel, icon: "cable.connector")
+                detail("容量 / 可用", model.mount.mounted && !model.busy ? "\(MountState.capacity(model.mount.totalBytes)) / \(MountState.capacity(model.mount.freeBytes))" : "—", icon: "internaldrive")
+                    .help("来自 macOS，每 15 秒刷新；APFS 显示整个共享容器的总容量与可用空间。1 GB = 10 亿字节。")
                 detail("SMART 警告", model.last.map { $0.warning == 0 ? "上次采集无严重警告" : String(format: "警告代码 0x%02X", $0.warning) } ?? "尚无数据", icon: "checkmark.shield")
                 HStack {
                     metric("已用寿命估计", model.last?.used.map { "\($0)%" } ?? "—")
+                        .help("来自 SMART 的厂商寿命消耗估计；0% 不代表零磨损，不能换算成保证性的健康分数。")
                     Spacer()
                     metric("通电时间", model.last?.hours.map { "\($0) 小时" } ?? "—")
                     Spacer()
                     metric("介质错误", model.last?.errors.map(String.init) ?? "—")
                 }.padding(.top, 4)
-            }
-            Divider()
-            VStack(alignment: .leading, spacing: 7) {
-                Text(model.enrollment?.model ?? "缺少设备登记文件").font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
-                Text(model.collectorURL == nil ? "此构建未包含采集后端，可查看已有记录。采集功能需另行配置已授权的兼容后端。" : "读取时会暂时卸载硬盘并请求管理员验证，完成后自动恢复。请先关闭该盘的文件。").font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             if let message = model.message {
                 Text(message).font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -254,7 +261,21 @@ struct MainView: View {
                 Button(model.busy ? "正在采集…" : "读取温度") { model.capture() }
                     .buttonStyle(.borderedProminent).tint(.teal).controlSize(.large)
                     .disabled(!model.canCapture)
+                    .help(model.captureHelp)
+                Button { model.helpVisible.toggle() } label: { Image(systemName: "info.circle") }
+                    .buttonStyle(.borderless).accessibilityLabel("采集说明")
+                    .help(model.captureHelp)
+                    .popover(isPresented: $model.helpVisible) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("采集说明").font(.headline)
+                            Text(model.captureHelp)
+                            Text("手动采集 · 本机保存。菜单栏显示上次读数；打开详情不会重新采集。")
+                                .foregroundStyle(.secondary)
+                        }.font(.system(size: 12)).padding(18).frame(width: 300)
+                    }
                 Spacer()
+                Button { model.detailsVisible = true } label: { Text("SMART") }
+                    .buttonStyle(.borderless).help("查看硬盘信息与上次 SMART 快照")
                 Button { model.historyVisible = true } label: { Label("历史", systemImage: "chart.xyaxis.line") }
                     .disabled(model.readings.isEmpty).buttonStyle(.borderless)
                 Menu {
@@ -271,7 +292,9 @@ struct MainView: View {
                 Button("DriveThermal \(BuildInfo.current.version)") { model.aboutVisible = true }
                     .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(.secondary)
                 Spacer()
-                Text("手动采集 · 本机保存").font(.system(size: 10)).foregroundStyle(.secondary)
+                Image(systemName: "lock.shield").font(.system(size: 10)).foregroundStyle(.secondary)
+                    .help("手动采集 · 本机保存；无遥测或自动上传。")
+                    .accessibilityLabel("手动采集，本机保存")
             }
         }.padding(24).frame(width: 420)
             .background(Color(nsColor: .windowBackgroundColor))
@@ -283,6 +306,9 @@ struct MainView: View {
             }
             .sheet(isPresented: $model.aboutVisible) {
                 AboutView(model: model)
+            }
+            .sheet(isPresented: $model.detailsVisible) {
+                SMARTView(model: model)
             }
     }
     func detail(_ key: String, _ value: String, icon: String) -> some View {
@@ -298,6 +324,63 @@ struct MainView: View {
             Text(label).font(.system(size: 10)).foregroundStyle(.secondary)
             Text(value).font(.system(size: 16, weight: .medium, design: .rounded))
         }
+    }
+}
+
+struct SMARTView: View {
+    @ObservedObject var model: DriveModel
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("硬盘与 SMART").font(.title2.bold())
+                Spacer()
+                Button("完成") { model.detailsVisible = false }.keyboardShortcut(.defaultAction)
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("容量 · 当前系统信息").font(.headline)
+                    row("容量范围", model.mount.isAPFS ? "APFS 共享容器" : "当前卷")
+                    row("总容量", model.mount.mounted && !model.busy ? MountState.capacity(model.mount.totalBytes) : "—")
+                    row("可用空间", model.mount.mounted && !model.busy ? MountState.capacity(model.mount.freeBytes) : "—")
+                    Text("容量每 15 秒刷新；APFS 多个卷共享容器空间。GB 使用十进制单位。")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Divider()
+                    Text("SMART · 上次成功采集").font(.headline)
+                    if let r = model.last {
+                        Text(r.capturedAt.formatted(date: .abbreviated, time: .standard)).font(.caption).foregroundStyle(.secondary)
+                        row("型号", r.model)
+                        row("固件", r.smart?.firmware ?? "—")
+                        row("SSD 综合温度", "\(Int(r.celsius.rounded())) °C", help: "NVMe SMART 综合温度，不是桥接芯片或外壳温度。")
+                        row("严重警告", String(format: "0x%02X", r.warning) + (r.warning == 0 ? " · 无严重警告" : " · 请检查采集日志"))
+                        row("备用空间", r.spare.map { "\($0)%" } ?? "—", help: "SSD 内部备用容量比例，与文件系统可用空间无关。")
+                        row("备用空间警告阈值", r.smart?.spareThreshold ?? "—")
+                        row("已用寿命估计", r.used.map { "\($0)%" } ?? "—", help: "厂商估计的寿命消耗，可以超过 100%；不是保证性的健康评分。")
+                        row("累计读取", SMARTDetails.dataAmount(r.smart?.dataRead), help: "SMART 累计计数 × 512,000 字节；不是当前读写速度。原始计数：\(r.smart?.dataRead ?? "—")")
+                        row("累计写入", SMARTDetails.dataAmount(r.smart?.dataWritten), help: "SMART 累计计数 × 512,000 字节；不是当前读写速度。原始计数：\(r.smart?.dataWritten ?? "—")")
+                        row("主机读取命令", r.smart?.readCommands ?? "—")
+                        row("主机写入命令", r.smart?.writeCommands ?? "—")
+                        row("控制器忙碌时间", r.smart?.busyMinutes.map { "\($0) 分钟" } ?? "—")
+                        row("通电时间", r.hours.map { "\($0) 小时" } ?? "—")
+                        row("通电次数", r.smart?.powerCycles ?? "—")
+                        row("非正常断电次数", r.smart?.unsafeShutdowns ?? "—", help: "控制器未收到正常关机通知的累计次数，不等于磁盘损坏次数。")
+                        row("介质 / 数据完整性错误", r.errors.map(String.init) ?? "—")
+                        row("错误日志条目", r.smart?.errorLogEntries ?? "—")
+                    } else {
+                        Text("尚无有效 SMART 快照。").foregroundStyle(.secondary)
+                    }
+                    Divider()
+                    Text("读取详情不会访问 USB 采集接口。缺少的字段显示 —；已有快照不会因断开硬盘而变成实时数据。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }.padding(.trailing, 8)
+            }
+        }.padding(22).frame(width: 490, height: 610)
+    }
+    func row(_ title: String, _ value: String, help: String = "") -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title).foregroundStyle(.secondary)
+            Spacer(minLength: 14)
+            Text(value).multilineTextAlignment(.trailing).textSelection(.enabled)
+        }.font(.system(size: 12)).help(help)
     }
 }
 

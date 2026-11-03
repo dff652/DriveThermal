@@ -28,3 +28,42 @@ check(report.contains("0.2.0 (2)") && report.contains("captureFailed exit=1"), "
 let malicious = Data("{\"date\":0,\"event\":\"SERIAL-SECRET\",\"exitCode\":0}".utf8)
 check((try? JSONDecoder().decode(EventRecord.self, from: malicious)) == nil, "unknown log content accepted")
 print("Diagnostics privacy: 3 checks passed")
+
+let extended = sample + """
+
+Firmware: DEMO1
+Available Spare Threshold: 10%
+Data Units Read (x512,000B): 1000000
+Data Units Written (x512,000B): 2000000
+Host Read Commands: 18446744073709551616
+Power Cycles: 12
+Unsafe Shutdowns: 3
+Error Info Log Entries: 0
+"""
+let rich = Reading.parse(summary: extended, id: "rich", date: date)!
+check(rich.smart?.firmware == "DEMO1" && rich.smart?.unsafeShutdowns == "3", "extended SMART fields missing")
+check(rich.smart?.readCommands == "18446744073709551616", "128-bit counter truncated")
+check(SMARTDetails.dataAmount(rich.smart?.dataRead) == "512.00 GB" && SMARTDetails.dataAmount(rich.smart?.dataWritten) == "1.02 TB", "data unit conversion incorrect")
+check(SMARTDetails(fields: ["Power Cycles": "-4", "Unsafe Shutdowns": "nan"]).powerCycles == nil, "invalid counter accepted")
+var legacy = try JSONSerialization.jsonObject(with: JSONEncoder().encode(good!)) as! [String: Any]
+legacy.removeValue(forKey: "smart")
+let old = try JSONDecoder().decode(Reading.self, from: JSONSerialization.data(withJSONObject: legacy))
+check(old.smart == nil && old.celsius == 44, "old history incompatible")
+let enrichedReport = DiagnosticReport.make(build: info, os: "test", mounted: true, enrolled: true, collectorAvailable: true, busy: false, reading: rich, events: [])
+check(!enrichedReport.contains("DEMO1") && !enrichedReport.contains("18446744073709551616"), "expanded SMART fields leaked into diagnostics")
+let temp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+defer { try? FileManager.default.removeItem(at: temp) }
+let profile = temp.appendingPathComponent("device.plist")
+let uuid = "11111111-1111-4111-8111-111111111111"
+try PropertyListSerialization.data(fromPropertyList: ["volume_uuid": uuid, "mount_path": "/Volumes/Test", "nvme_model": "TEST SSD"], format: .xml, options: 0).write(to: profile)
+let enrollment = Enrollment(url: profile)!
+func mountData(_ fields: [String: Any]) throws -> Data { try PropertyListSerialization.data(fromPropertyList: fields, format: .xml, options: 0) }
+var fields: [String: Any] = ["VolumeUUID": uuid, "MountPoint": "/Volumes/Test", "APFSContainerSize": 1000000000, "APFSContainerFree": 400000000, "VolumeSize": 0, "FreeSpace": 0]
+let capacity = MountState.parse(try mountData(fields), expected: enrollment)
+check(capacity.mounted && capacity.isAPFS && capacity.totalBytes == 1000000000 && capacity.freeBytes == 400000000, "APFS shared space incorrect")
+fields["VolumeUUID"] = "22222222-2222-4222-8222-222222222222"
+check(!MountState.parse(try mountData(fields), expected: enrollment).connected, "wrong-volume capacity accepted")
+fields["VolumeUUID"] = uuid; fields["APFSContainerFree"] = 2000000000
+check(MountState.parse(try mountData(fields), expected: enrollment).freeBytes == nil, "impossible capacity accepted")
+print("SMART expansion, history migration, privacy and capacity: 9 checks passed")

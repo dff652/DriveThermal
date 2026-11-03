@@ -14,7 +14,10 @@ temperature snapshots**. 中文界面，支持手动采集、历史记录及脱�
 - Desktop window, optional always-on-top, and menu-bar temperature display.
 - Last-captured temperature and explicit timestamp; no misleading live readings.
 - Up to 500 local history entries; plot of the latest 30 observations.
-- Passive mount-state refresh every 15 seconds.
+- Passive mount-state and capacity refresh every 15 seconds (APFS shared-container space).
+- SMART details: firmware, spare capacity, lifetime read/write totals, power cycles and error counts.
+- Compact collection-help popover and native hover tooltips.
+- Lifetime I/O totals are not live throughput; no background benchmark is performed.
 - Version, build revision, maintainer link and project link in About.
 - Local application event log, collector-log access and allowlisted diagnostic export.
 - No telemetry, accounts or automatic uploads. GitHub links open only when clicked.
@@ -65,7 +68,7 @@ to open About, inspect history or export a diagnostic report.
 
 ## Status
 
-Version 0.2.0 is an early, UI-first public release. The private local collector
+Version 0.3.0 is an early, UI-first public release. The private local collector
 integration was validated on one Apple Silicon Mac and one Realtek 0BDA:9210
 NVMe enclosure; that does not establish compatibility for other disks or bridges.
 
