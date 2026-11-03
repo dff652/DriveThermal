@@ -20,14 +20,14 @@ temperature snapshots**. 中文界面，支持手动／定时采集、历史记�
 - Lifetime I/O totals are not live throughput; no background benchmark is performed.
 - Version, build revision, maintainer link and project link in About.
 - Local application event log, collector-log access and allowlisted diagnostic export.
-- Optional authorized background capture, manual/automatic switching and configurable 30–1440 minute intervals.
+- Optional authorized background capture, manual/automatic switching and configurable 5–1440 minute intervals.
 - Mount/unmount controls in the desktop window and menu-bar menu. Unmount pauses collection; a verified mount restores the selected mode. USB power is unchanged.
 - No telemetry, accounts or automatic uploads. GitHub links open only when clicked.
 
 ## 为什么温度不是实时刷新？
 
 本地验证过的 USB NVMe 采集方式需要短暂卸载磁盘、接管 USB 接口，完成后恢复挂载。
-因此 DriveThermal 不高频轮询温度。可选后台服务支持 30–1440 分钟的定时采集，磁盘忙碌时跳过。菜单栏显示的是**上次读数**，提示和窗口注明时间。
+因此 DriveThermal 不高频轮询温度。可选后台服务支持 5–1440 分钟的定时采集，磁盘忙碌时跳过。菜单栏显示的是**上次读数**，提示和窗口注明时间。
 关闭小窗仍保留菜单栏；从菜单栏退出应用。
 
 ## Build / 构建
@@ -70,7 +70,7 @@ to open About, inspect history or export a diagnostic report.
 
 ## Status
 
-Version 0.6.0 is an early, UI-first public release. The private local collector
+Version 0.6.1 is an early, UI-first public release. The private local collector
 integration was validated on one Apple Silicon Mac and one Realtek 0BDA:9210
 NVMe enclosure; that does not establish compatibility for other disks or bridges.
 

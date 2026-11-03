@@ -9,9 +9,12 @@ enum ServicePaths {
     static let plist = "/Library/LaunchDaemons/" + label + ".plist"
 }
 struct CaptureSettings: Codable, Equatable {
+    static let minimumMinutes = 5
+    static let maximumMinutes = 1440
+    static let presets = [15, 30, 60, 180, 360]
     var automatic = false
     var intervalMinutes = 180
-    var valid: Bool { (30...1440).contains(intervalMinutes) }
+    var valid: Bool { (Self.minimumMinutes...Self.maximumMinutes).contains(intervalMinutes) }
     func forScheduling(volumePaused: Bool) -> CaptureSettings {
         CaptureSettings(automatic: automatic && !volumePaused, intervalMinutes: intervalMinutes)
     }

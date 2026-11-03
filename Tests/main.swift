@@ -113,3 +113,17 @@ fields.removeValue(forKey: "MountPoint")
 let unmountedState = MountState.parse(try mountData(fields), expected: enrollment)
 check(unmountedState.connected && !unmountedState.mounted, "unmounted volume incorrectly shown as disconnected")
 print("Volume pause, resume, manual mode and compatibility: 5 checks passed")
+
+for minutes in [5, 7, 15, 1440] {
+    check(CaptureSettings(automatic: true, intervalMinutes: minutes).valid, "valid custom interval rejected")
+}
+for minutes in [Int.min, 0, 4, 1441, Int.max] {
+    check(!CaptureSettings(automatic: true, intervalMinutes: minutes).valid, "out-of-range interval accepted")
+}
+let fiveMinutes = CaptureSettings(automatic: true, intervalMinutes: 5)
+scheduleTest.reset(fiveMinutes, now: start)
+for offset in stride(from: 15, to: 300, by: 15) {
+    check(!scheduleTest.due(fiveMinutes, now: start.addingTimeInterval(Double(offset)), busy: false), "five-minute interval fired early")
+}
+check(scheduleTest.due(fiveMinutes, now: start.addingTimeInterval(300), busy: false), "five-minute deadline did not fire")
+print("Custom intervals: boundary validation and five-minute scheduling passed")

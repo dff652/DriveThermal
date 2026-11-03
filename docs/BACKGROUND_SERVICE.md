@@ -34,8 +34,8 @@ The default public build cannot install a USB collector service.
 
 ## Scheduling
 
-Manual is the initial default. Automatic intervals are 30–1440 minutes, with
-presets for 30, 60, 180 and 360 minutes. Switching mode or changing the interval
+Manual is the initial default. Automatic intervals are 5–1440 minutes, with
+presets for 15, 30, 60, 180 and 360 minutes. Switching mode or changing the interval
 starts a fresh countdown. Manual capture also resets the countdown.
 
 There is one capture at a time and a one-minute manual request cooldown. Busy

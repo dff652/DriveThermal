@@ -112,7 +112,7 @@ extension DriveModel {
     }
     func applySettings() {
         let settings = CaptureSettings(automatic: draftAutomatic, intervalMinutes: draftMinutes)
-        guard settings.valid else { message = "采集间隔应为 30–1440 分钟。"; return }
+        guard settings.valid else { message = "采集间隔应为 5–1440 分钟。"; return }
         sendService(ServiceRequest(command: "configure", settings: settings))
     }
     func installService(remove: Bool = false) {
@@ -163,14 +163,16 @@ struct CaptureSettingsView: View {
                 }.pickerStyle(.segmented)
                 HStack {
                     Text("间隔（分钟）")
-                    TextField("30–1440", value: $model.draftMinutes, formatter: NumberFormatter())
+                    TextField("5–1440", value: $model.draftMinutes, formatter: NumberFormatter())
                         .frame(width: 90).textFieldStyle(.roundedBorder)
                 }.disabled(!model.draftAutomatic)
                 HStack {
-                    ForEach([30, 60, 180, 360], id: \.self) { minutes in
+                    ForEach(CaptureSettings.presets, id: \.self) { minutes in
                         Button("\(minutes) 分钟") { model.draftMinutes = minutes }.disabled(!model.draftAutomatic)
                     }
                 }
+                Text("5–15 分钟适合短期观察；每次采集仍需短暂卸载硬盘。")
+                    .font(.caption).foregroundStyle(.secondary)
                 if let next = model.serviceStatus?.nextAttempt {
                     Text("下次尝试：\(next.formatted(date: .abbreviated, time: .shortened))").font(.caption)
                 }

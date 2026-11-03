@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1 — 2026-11-03
+
+- Allow custom collection intervals of 5–1440 minutes in both the app and service.
+- Add a 15-minute preset alongside 30, 60, 180 and 360 minutes.
+- Keep existing settings and explain that short intervals still temporarily unmount the disk.
+
 ## 0.6.0 — 2026-11-03
 
 - Add mount/unmount controls to the desktop window and menu-bar menu for the enrolled volume.
