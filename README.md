@@ -68,7 +68,7 @@ to open About, inspect history or export a diagnostic report.
 
 ## Status
 
-Version 0.3.0 is an early, UI-first public release. The private local collector
+Version 0.3.1 is an early, UI-first public release. The private local collector
 integration was validated on one Apple Silicon Mac and one Realtek 0BDA:9210
 NVMe enclosure; that does not establish compatibility for other disks or bridges.
 

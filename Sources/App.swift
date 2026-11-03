@@ -258,6 +258,18 @@ struct MainView: View {
                     .padding(10).frame(maxWidth: .infinity, alignment: .leading).background(Color.primary.opacity(0.05)).clipShape(RoundedRectangle(cornerRadius: 8))
             }
             HStack(spacing: 10) {
+                Button { model.detailsVisible = true } label: {
+                    navigationLabel("查看SMART详情", icon: "list.bullet.rectangle")
+                }
+                .buttonStyle(.plain).help("查看硬盘信息与上次 SMART 快照，不会重新采集")
+                Button { model.historyVisible = true } label: {
+                    navigationLabel("查看历史", icon: "chart.xyaxis.line")
+                }
+                .buttonStyle(.plain).disabled(model.readings.isEmpty)
+                .opacity(model.readings.isEmpty ? 0.45 : 1)
+                .help("查看已保存的温度记录与趋势")
+            }
+            HStack(spacing: 10) {
                 Button(model.busy ? "正在采集…" : "读取温度") { model.capture() }
                     .buttonStyle(.borderedProminent).tint(.teal).controlSize(.large)
                     .disabled(!model.canCapture)
@@ -274,10 +286,6 @@ struct MainView: View {
                         }.font(.system(size: 12)).padding(18).frame(width: 300)
                     }
                 Spacer()
-                Button { model.detailsVisible = true } label: { Text("SMART") }
-                    .buttonStyle(.borderless).help("查看硬盘信息与上次 SMART 快照")
-                Button { model.historyVisible = true } label: { Label("历史", systemImage: "chart.xyaxis.line") }
-                    .disabled(model.readings.isEmpty).buttonStyle(.borderless)
                 Menu {
                     Button("在 Finder 中打开硬盘") { model.openDisk() }.disabled(!model.mount.mounted || model.busy)
                     Button("查看采集日志") { model.openLog() }
@@ -310,6 +318,21 @@ struct MainView: View {
             .sheet(isPresented: $model.detailsVisible) {
                 SMARTView(model: model)
             }
+    }
+    func navigationLabel(_ title: String, icon: String) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: icon)
+            Text(title).fontWeight(.semibold).lineLimit(1)
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold))
+        }
+        .font(.system(size: 12)).foregroundStyle(Color.primary)
+        .padding(.horizontal, 12).padding(.vertical, 12)
+        .frame(maxWidth: .infinity)
+        .background(Color.teal.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.teal.opacity(0.45), lineWidth: 1))
+        .contentShape(RoundedRectangle(cornerRadius: 10))
     }
     func detail(_ key: String, _ value: String, icon: String) -> some View {
         HStack {

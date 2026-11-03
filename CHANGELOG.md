@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1 — 2026-11-03
+
+- Rename the navigation actions to 查看SMART详情 and 查看历史.
+- Place both actions in a dedicated row with matching tinted backgrounds, borders, icons and disclosure arrows; keep collection actions separate.
+
 ## 0.3.0 — 2026-11-03
 
 - Add system capacity and available space, explicitly labelled as shared-container space for APFS.
