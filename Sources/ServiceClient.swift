@@ -52,6 +52,8 @@ extension DriveModel {
     func refreshService() { sendService(ServiceRequest(command: "status"), quiet: true) }
     func showSettings() {
         if let service = serviceStatus { draftAutomatic = service.settings.automatic; draftMinutes = service.settings.intervalMinutes }
+        draftIntervalText = String(draftMinutes)
+        message = nil
         settingsVisible = true
         refreshService()
     }
@@ -62,13 +64,19 @@ extension DriveModel {
             let result = Result { try ServiceIO.request(request) }
             DispatchQueue.main.async {
                 self.serviceChecking = false
+                if request.command == "configure" { self.savingSettings = false }
                 switch result {
                 case .success(let value):
                     let previous = self.serviceStatus
                     self.serviceStatus = value
                     if self.activeProcess == nil { self.busy = value.busy }
                     if request.command == "configure" && value.error == nil {
-                        self.message = "采集设置已保存。"; self.draftAutomatic = value.settings.automatic; self.draftMinutes = value.settings.intervalMinutes
+                        if value.settings == request.settings {
+                            self.message = "采集设置已保存。"; self.draftAutomatic = value.settings.automatic; self.draftMinutes = value.settings.intervalMinutes
+                            self.settingsVisible = false
+                        } else {
+                            self.message = "服务返回的设置与所选值不一致，请重试。"
+                        }
                     }
                     if let error = value.error {
                         self.message = error == "rateLimited" ? "请至少间隔 1 分钟再手动采集。" : error == "busy" ? "已有磁盘操作正在进行。" : error == "volumePaused" ? "硬盘已暂停采集，请先点击挂载。" : error == "recoveryRequired" ? "请先手动读取温度并确认恢复成功，再开启自动采集。" : "设置未生效：\(error)"
@@ -111,8 +119,12 @@ extension DriveModel {
         } catch { message = "后台已采集，本机历史缓存保存失败。" }
     }
     func applySettings() {
+        guard !serviceChecking, !installingService, !busy, !savingSettings else { return }
         let settings = CaptureSettings(automatic: draftAutomatic, intervalMinutes: draftMinutes)
         guard settings.valid else { message = "采集间隔应为 5–1440 分钟。"; return }
+        // Closing unchanged settings must not restart the collection countdown.
+        if settings == serviceStatus?.settings { settingsVisible = false; return }
+        savingSettings = true
         sendService(ServiceRequest(command: "configure", settings: settings))
     }
     func installService(remove: Bool = false) {
@@ -144,10 +156,16 @@ extension DriveModel {
 import SwiftUI
 struct CaptureSettingsView: View {
     @ObservedObject var model: DriveModel
+    private var interval: Int? { Int(model.draftIntervalText.trimmingCharacters(in: .whitespacesAndNewlines)) }
+    private var validInterval: Bool { interval.map { (CaptureSettings.minimumMinutes...CaptureSettings.maximumMinutes).contains($0) } ?? false }
+    private var hasChanges: Bool {
+        guard let settings = model.serviceStatus?.settings else { return false }
+        return model.draftAutomatic != settings.automatic || (model.draftAutomatic && interval != settings.intervalMinutes)
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("采集模式与间隔").font(.title2.bold())
-            Text(model.modeDescription).font(.headline)
+            Text("当前生效：\(model.modeDescription)").font(.headline)
             if model.serviceStatus == nil {
                 Text("首次批准安装后台服务后，采集无需反复输入密码。服务仅操作已登记硬盘；不会保存你的密码。")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
@@ -163,12 +181,12 @@ struct CaptureSettingsView: View {
                 }.pickerStyle(.segmented)
                 HStack {
                     Text("间隔（分钟）")
-                    TextField("5–1440", value: $model.draftMinutes, formatter: NumberFormatter())
+                    TextField("5–1440", text: $model.draftIntervalText)
                         .frame(width: 90).textFieldStyle(.roundedBorder)
                 }.disabled(!model.draftAutomatic)
                 HStack {
                     ForEach(CaptureSettings.presets, id: \.self) { minutes in
-                        Button("\(minutes) 分钟") { model.draftMinutes = minutes }.disabled(!model.draftAutomatic)
+                        Button("\(minutes) 分钟") { model.draftIntervalText = String(minutes) }.disabled(!model.draftAutomatic)
                     }
                 }
                 Text("5–15 分钟适合短期观察；每次采集仍需短暂卸载硬盘。")
@@ -182,8 +200,11 @@ struct CaptureSettingsView: View {
                     Button("更新／修复服务…") { model.installService() }
                         .disabled(model.busy || model.installingService)
                 }
-                Button("应用设置") { model.applySettings() }
-                    .buttonStyle(.borderedProminent).disabled(model.serviceChecking || model.installingService)
+                if model.draftAutomatic && !validInterval {
+                    Text("请输入 5–1440 的整数分钟。").font(.caption).foregroundStyle(.red)
+                } else if hasChanges {
+                    Text("有未保存的修改，点击“保存并关闭”后生效。").font(.caption).foregroundStyle(.secondary)
+                }
             }
             Text("每次采集会暂时卸载硬盘。读写、备份忙碌或本机未登录时跳过；休眠唤醒后重新计时，不补采。退出小窗应用后，自动采集仍会运行。")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
@@ -200,8 +221,20 @@ struct CaptureSettingsView: View {
                         .disabled(model.busy || model.installingService)
                 }
                 Spacer()
-                Button("完成") { model.settingsVisible = false }.keyboardShortcut(.defaultAction)
+                Button(model.serviceStatus == nil ? "关闭" : "取消") { model.settingsVisible = false }
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(model.installingService)
+                if model.serviceStatus != nil {
+                    Button(model.savingSettings ? "正在保存…" : "保存并关闭") {
+                        if model.draftAutomatic, let minutes = interval { model.draftMinutes = minutes }
+                        model.applySettings()
+                    }
+                    .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                    .disabled(model.serviceChecking || model.installingService || model.busy || (model.draftAutomatic && !validInterval))
+                }
             }
         }.padding(24).frame(width: 470)
+            .disabled(model.savingSettings)
+            .interactiveDismissDisabled(model.savingSettings || model.installingService)
     }
 }

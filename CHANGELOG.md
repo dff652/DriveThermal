@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.2 — 2026-11-03
+
+- Group Cancel and Save and Close at the bottom right of collection settings, replacing the ambiguous Done action.
+- Close only after the service confirms the saved settings; keep errors visible and prevent duplicate saves.
+- Label the active configuration separately from unsaved edits and validate custom interval text before saving.
+- Preserve the collection countdown when closing unchanged settings.
+
 ## 0.6.1 — 2026-11-03
 
 - Allow custom collection intervals of 5–1440 minutes in both the app and service.

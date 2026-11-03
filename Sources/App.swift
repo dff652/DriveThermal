@@ -18,9 +18,11 @@ final class DriveModel: ObservableObject {
     @Published var settingsVisible = false
     @Published var serviceStatus: ServiceStatus? = nil
     @Published var serviceChecking = false
+    @Published var savingSettings = false
     @Published var installingService = false
     @Published var draftAutomatic = false
     @Published var draftMinutes = 180
+    @Published var draftIntervalText = "180"
     @Published var pinned = false
     @Published var now = Date()
     let state = appStateURL
