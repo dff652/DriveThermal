@@ -1,0 +1,20 @@
+.build/
+build/
+build-local/
+dist/
+.DS_Store
+*.log
+*.jsonl
+.env*
+# Unlicensed upstream collector and local adaptation remain private.
+collector/
+scripts/adapt-state.py
+# Never publish enrollment, raw captures, histories or credentials.
+device.plist
+runs/
+latest
+history.json
+*.bin
+*.dmg
+*.zip
+*.app/
